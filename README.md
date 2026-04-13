@@ -2,9 +2,11 @@
 
 An open-source implementation of the research paper *"Network Structure in UK Payment Flows: Evidence on Economic Interdependencies and Implications for Real-Time Measurement"* (Humnabadkar, 2026).
 
-This project analyses inter-industry payment flows published by the UK Office for National Statistics, constructs directed weighted network graphs, extracts graph-theoretic features, and evaluates whether network structure improves forecasting of payment flow dynamics.
+This project analyses inter-industry payment flows published by the UK Office for National Statistics, constructs directed weighted network graphs, extracts graph-theoretic features, and evaluates whether network structure improves forecasting of payment flow dynamics. 
 
-## What This Project Does
+Try the app here : https://networked-payments-visualizer.streamlit.app/
+
+## Project details
 
 1. **Loads ONS payment data** — reads the experimental "Industry to Industry Payment Flows" Excel dataset, aggregates monthly records into quarterly bilateral flows across 88 industry sectors.
 2. **Builds network graphs** — constructs directed weighted graphs per quarter where nodes are industries and edge weights are payment volumes.
