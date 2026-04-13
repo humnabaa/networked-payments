@@ -166,4 +166,4 @@ If you use this code in your research, please cite:
 
 ## Licence
 
-This project is open source. See [LICENSE](LICENSE) for details.
+This project is open source. See [LICENSE]([LICENSE](https://github.com/humnabaa/networked-payments?tab=MIT-1-ov-file)) for details.
