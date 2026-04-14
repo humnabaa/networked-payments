@@ -59,7 +59,7 @@ Try the app here : https://networked-payments-visualizer.streamlit.app/
 **With uv (recommended):**
 
 ```bash
-[git clone https://github.com/humnabaa/networked-payments.git]
+git clone https://github.com/humnabaa/networked-payments.git
 cd networked-payments
 uv sync
 ```
@@ -67,7 +67,7 @@ uv sync
 **With pip:**
 
 ```bash
-[git clone https://github.com/humnabaa/networked-payments.git]
+git clone https://github.com/humnabaa/networked-payments.git
 cd networked-payments
 pip install -r requirements.txt
 ```
@@ -105,13 +105,13 @@ The dashboard will automatically detect the Excel file in `data/raw/` and load i
 ```bash
 # With uv
 uv run python run_pipeline.py \
-    --data "data/raw/onsindustryflowssic2 (1).xlsx" \
+    --data "data/raw/onsindustryflowssic2.xlsx" \
     --config config/settings.yaml \
     --output outputs
 
 # With pip
 python run_pipeline.py \
-    --data "data/raw/onsindustryflowssic2 (1).xlsx" \
+    --data "data/raw/onsindustryflowssic2.xlsx" \
     --config config/settings.yaml \
     --output outputs
 ```
