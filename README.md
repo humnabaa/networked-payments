@@ -59,7 +59,7 @@ Try the app here : https://networked-payments-visualizer.streamlit.app/
 **With uv (recommended):**
 
 ```bash
-git clone https://github.com/<your-username>/networked-payments.git
+[git clone https://github.com/<your-username>/networked-payments.git](https://github.com/humnabaa/networked-payments.git)
 cd networked-payments
 uv sync
 ```
@@ -67,7 +67,7 @@ uv sync
 **With pip:**
 
 ```bash
-git clone https://github.com/<your-username>/networked-payments.git
+[git clone https://github.com/<your-username>/networked-payments.git](https://github.com/humnabaa/networked-payments.git)
 cd networked-payments
 pip install -r requirements.txt
 ```
