@@ -1,10 +1,16 @@
 # Dataset schema mapping — edit these to match your data's column names
+# Supports both ONS real data and synthetic generated data
 schema:
   source_column: "Payer (2-digit SIC)"
   destination_column: "Payee (2-digit SIC)"
   value_column: "Value (£)"
   time_column: "Date"
   sic_code_column: null  # SIC codes are the source/target values themselves
+  # Alternative column names for synthetic/processed data
+  alt_source_column: "source"
+  alt_destination_column: "target"
+  alt_value_column: "value"
+  alt_time_column: "date"
   # ONS Excel format settings
   ons_excel:
     sheet_name: "SIC2_2019_2025"
@@ -48,6 +54,15 @@ model:
     max_depth: 5
     min_samples_leaf: 5
   min_expanding_window: 4  # Minimum quarters for training
+
+# Visualization settings
+visualization:
+  layout_seed: 42
+  layout_k: 0.3  # Spring layout parameter
+  max_edges_displayed: 300  # Limit edges for performance
+  node_size_range: [8, 40]  # Min/max node size
+  edge_width_range: [0.3, 3.0]  # Min/max edge width
+  enable_enhanced_analysis: true  # Show advanced network tools
 
 # Period boundaries for temporal analysis (Table 3)
 periods:

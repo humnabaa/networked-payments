@@ -71,9 +71,12 @@ def load_payment_data(filepath, config):
 
     # --- Map columns to canonical names ---
     # Handle encoding differences (e.g. £ may read differently)
-    def _find_col(df_cols, target):
+    def _find_col(df_cols, target, alt_target=None):
         if target in df_cols:
             return target
+        # Try alternative column name
+        if alt_target and alt_target in df_cols:
+            return alt_target
         # Try substring match for encoding-mangled column names
         target_clean = target.lower().replace("£", "").replace("(", "").replace(")", "").strip()
         for c in df_cols:
@@ -83,10 +86,10 @@ def load_payment_data(filepath, config):
                 return c
         return None
 
-    src_col = _find_col(df.columns, schema["source_column"])
-    dst_col = _find_col(df.columns, schema["destination_column"])
-    val_col = _find_col(df.columns, schema["value_column"])
-    time_col = _find_col(df.columns, schema["time_column"])
+    src_col = _find_col(df.columns, schema["source_column"], schema.get("alt_source_column"))
+    dst_col = _find_col(df.columns, schema["destination_column"], schema.get("alt_destination_column"))
+    val_col = _find_col(df.columns, schema["value_column"], schema.get("alt_value_column"))
+    time_col = _find_col(df.columns, schema["time_column"], schema.get("alt_time_column"))
 
     resolved = {"source": src_col, "target": dst_col, "value": val_col, "date": time_col}
     missing = [k for k, v in resolved.items() if v is None]
@@ -107,13 +110,25 @@ def load_payment_data(filepath, config):
     df = df.dropna(subset=["source", "target", "value", "date"])
     df = df[df["value"] > 0].copy()
 
-    # --- Convert SIC codes to industry names ---
-    df["source"] = df["source"].apply(_sic_to_industry_name)
-    df["target"] = df["target"].apply(_sic_to_industry_name)
+    # --- Convert SIC codes to industry names (if source/target are numeric) ---
+    # Check if already industry names (synthetic data) or SIC codes (ONS data)
+    is_already_names = isinstance(df["source"].iloc[0], str) and df["source"].iloc[0] in SIC_INDUSTRY_NAMES.values()
+    if not is_already_names:
+        df["source"] = df["source"].apply(_sic_to_industry_name)
+        df["target"] = df["target"].apply(_sic_to_industry_name)
     df = df.dropna(subset=["source", "target"])
 
     # --- Convert monthly dates to quarters and aggregate ---
-    df["quarter"] = df["date"].apply(_month_to_quarter)
+    # Handle both "YYYY-QX" format (synthetic) and "Month YYYY" format (ONS)
+    def _normalize_quarter(date_str):
+        if isinstance(date_str, str):
+            if "-Q" in date_str:  # Already in YYYY-QX format
+                return date_str
+            else:  # Try month-to-quarter conversion
+                return _month_to_quarter(date_str)
+        return None
+
+    df["quarter"] = df["date"].apply(_normalize_quarter)
     df = df.dropna(subset=["quarter"])
 
     # Aggregate monthly values to quarterly totals per industry pair
@@ -131,6 +146,43 @@ def load_payment_data(filepath, config):
     print(f"  Total value: £{df['value'].sum():,.0f}")
 
     return df
+
+
+def process_payment_dataframe(df):
+    """Apply SIC-to-name conversion and quarterly aggregation to an in-memory DataFrame.
+
+    Expects columns: source, target, value, date  (as produced by ons_downloader).
+    Returns a DataFrame with columns: source, target, value, quarter  (ready for graph building).
+    """
+    df = df.copy()
+
+    # Drop suppressed values
+    df = df[~df["value"].isin(["[-]", "[c]", "-", "c"])].copy()
+    df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    df = df.dropna(subset=["source", "target", "value", "date"])
+    df = df[df["value"] > 0].copy()
+
+    # Convert SIC codes to industry names
+    df["source"] = df["source"].apply(_sic_to_industry_name)
+    df["target"] = df["target"].apply(_sic_to_industry_name)
+    df = df.dropna(subset=["source", "target"])
+
+    def _normalize_quarter(date_str):
+        if isinstance(date_str, str):
+            if "-Q" in date_str:
+                return date_str
+            return _month_to_quarter(date_str)
+        return None
+
+    df["quarter"] = df["date"].apply(_normalize_quarter)
+    df = df.dropna(subset=["quarter"])
+
+    df = (
+        df.groupby(["source", "target", "quarter"], as_index=False)["value"]
+        .sum()
+    )
+
+    return df.sort_values("quarter").reset_index(drop=True)
 
 
 def generate_sample_data(

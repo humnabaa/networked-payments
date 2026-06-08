@@ -14,7 +14,7 @@ import pandas as pd
 import networkx as nx
 
 from src.utils import load_config, get_industry_category, get_category_color
-from src.data_loader import load_payment_data
+from src.data_loader import load_payment_data, process_payment_dataframe
 from src.graph_builder import build_quarterly_graphs, get_node_list, build_adjacency_matrix
 from src.feature_extractor import extract_node_features, extract_network_features
 from viz.components.network_graph import (
@@ -27,6 +27,9 @@ from viz.components.network_graph import (
 from viz.components.metrics_panel import render_metrics_sidebar, render_metrics_timeseries
 from viz.components.time_slider import render_time_slider
 from viz.components.node_details import render_node_selector, render_node_details
+from viz.components.ons_downloader import render_ons_loader
+from viz.components.model_results import render_model_results_section, load_model_results_from_files
+from viz.components.enhanced_network import render_enhanced_network
 
 st.set_page_config(
     page_title="Payment Network Visualizer",
@@ -150,12 +153,22 @@ def transform_graph(G, mode, graphs, selected_quarter, quarters, sic_lookup):
 
 @st.cache_data
 def load_and_process_data(data_path, config_path):
-    """Load data and build graphs (cached)."""
+    """Load data from file and build graphs (cached)."""
     config = load_config(config_path)
     df = load_payment_data(data_path, config)
     graphs = build_quarterly_graphs(df)
     node_list = get_node_list(graphs)
     return df, graphs, node_list, config
+
+
+@st.cache_data
+def load_and_process_dataframe(_df, config_path):
+    """Build graphs from an already-loaded DataFrame (cached by DataFrame hash)."""
+    config = load_config(config_path)
+    processed = process_payment_dataframe(_df)
+    graphs = build_quarterly_graphs(processed)
+    node_list = get_node_list(graphs)
+    return processed, graphs, node_list, config
 
 
 @st.cache_data
@@ -209,51 +222,62 @@ def main():
     st.caption("Interactive visualization of network structure and evolution")
 
     # --- Sidebar: Data Source ---
-    st.sidebar.title("Data Source")
+    st.sidebar.title("Data & Configuration")
 
     config_path = "config/settings.yaml"
+
+    # ONS live loader (always visible so user can reload any time)
+    ons_df = render_ons_loader()
+
+    # Determine data source: ONS in-memory > local file > upload
+    df_override = ons_df  # may be None
+
     data_path = None
+    if df_override is None:
+        # Look for a local file
+        default_data = Path("data/raw")
+        bundled_files = list(default_data.glob("*.xlsx")) + list(default_data.glob("*.csv"))
 
-    # Check for bundled data first
-    default_data = Path("data/raw")
-    bundled_files = list(default_data.glob("*.xlsx")) + list(default_data.glob("*.csv"))
-
-    if bundled_files:
-        if len(bundled_files) == 1:
-            data_path = str(bundled_files[0])
-            st.sidebar.success(f"Using: {bundled_files[0].name}")
+        if bundled_files:
+            if len(bundled_files) == 1:
+                data_path = str(bundled_files[0])
+                st.sidebar.success(f"Using: {bundled_files[0].name}")
+            else:
+                selected_file = st.sidebar.selectbox(
+                    "Select dataset",
+                    options=[f.name for f in bundled_files],
+                    key="bundled_file",
+                )
+                data_path = str(default_data / selected_file)
         else:
-            selected_file = st.sidebar.selectbox(
-                "Select dataset",
-                options=[f.name for f in bundled_files],
-                key="bundled_file",
+            # Manual upload
+            uploaded = st.sidebar.file_uploader(
+                "Upload payment data",
+                type=["csv", "xlsx", "xls"],
             )
-            data_path = str(default_data / selected_file)
-    else:
-        # Fall back to upload if no bundled data
-        uploaded = st.sidebar.file_uploader(
-            "Upload payment data",
-            type=["csv", "xlsx", "xls"],
-        )
-        if uploaded:
-            upload_path = f"data/raw/{uploaded.name}"
-            Path(upload_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(upload_path, "wb") as f:
-                f.write(uploaded.getvalue())
-            data_path = upload_path
-            st.session_state["data_path"] = data_path
-        else:
-            data_path = st.session_state.get("data_path")
+            if uploaded:
+                upload_path = f"data/raw/{uploaded.name}"
+                Path(upload_path).parent.mkdir(parents=True, exist_ok=True)
+                with open(upload_path, "wb") as f:
+                    f.write(uploaded.getvalue())
+                data_path = upload_path
+                st.session_state["data_path"] = data_path
+            else:
+                data_path = st.session_state.get("data_path")
 
-    if data_path is None:
-        st.info("No data found. Place an Excel or CSV file in `data/raw/` or upload one above.")
+    if df_override is None and data_path is None:
+        st.info("No data loaded. Use 'Load from ONS' in the sidebar, or place a file in data/raw/.")
         return
 
     # --- Load and process data ---
     try:
-        df, graphs, node_list, config = load_and_process_data(data_path, config_path)
+        if df_override is not None:
+            df, graphs, node_list, config = load_and_process_dataframe(df_override, config_path)
+        else:
+            df, graphs, node_list, config = load_and_process_data(data_path, config_path)
     except Exception as e:
         st.error(f"Error loading data: {e}")
+        st.write(f"Details: {type(e).__name__}: {str(e)}")
         return
 
     quarters = sorted(graphs.keys())
@@ -316,7 +340,10 @@ def main():
         return
 
     # Show metrics in sidebar
-    render_metrics_sidebar(network_features, selected_quarter, quarters)
+    try:
+        render_metrics_sidebar(network_features, selected_quarter, quarters)
+    except Exception as e:
+        st.sidebar.warning(f"Could not render metrics: {e}")
 
     # --- Transform graph ---
     G = graphs[selected_quarter]
@@ -327,34 +354,57 @@ def main():
 
     # --- Main: Network Graph ---
     title_suffix = f" [{graph_mode_label}]" if graph_mode != "directed" else ""
-    fig = create_network_figure(
-        G_viz,
-        pos,
-        node_categories,
-        category_colors,
-        title=f"Payment Network \u2014 {selected_quarter}{title_suffix}",
-        max_edges=viz_config.get("max_edges_displayed", 300),
-        node_size_range=tuple(viz_config.get("node_size_range", [8, 40])),
-        edge_width_range=tuple(viz_config.get("edge_width_range", [0.3, 3.0])),
-        edge_color_metric=edge_metric,
-        edge_colorscale=EDGE_COLORSCALES[edge_cscale],
-        node_features_df=nf_df,
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    try:
+        fig = create_network_figure(
+            G_viz,
+            pos,
+            node_categories,
+            category_colors,
+            title=f"Payment Network — {selected_quarter}{title_suffix}",
+            max_edges=viz_config.get("max_edges_displayed", 300),
+            node_size_range=tuple(viz_config.get("node_size_range", [8, 40])),
+            edge_width_range=tuple(viz_config.get("edge_width_range", [0.3, 3.0])),
+            edge_color_metric=edge_metric,
+            edge_colorscale=EDGE_COLORSCALES[edge_cscale],
+            node_features_df=nf_df,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error rendering network graph: {e}")
 
     # --- Bottom panels ---
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
         st.subheader("Industry Details")
-        selected_node = render_node_selector(G, nf_df)
-        if selected_node:
-            render_node_details(G, selected_node, nf_df, node_features, quarters)
+        try:
+            selected_node = render_node_selector(G, nf_df)
+            if selected_node:
+                render_node_details(G, selected_node, nf_df, node_features, quarters)
+        except Exception as e:
+            st.warning(f"Could not render industry details: {e}")
 
     with col_right:
         st.subheader("Network Evolution")
-        ts_fig = render_metrics_timeseries(network_features, quarters)
-        st.plotly_chart(ts_fig, use_container_width=True)
+        try:
+            ts_fig = render_metrics_timeseries(network_features, quarters)
+            st.plotly_chart(ts_fig, use_container_width=True)
+        except Exception as e:
+            st.warning(f"Could not render time series: {e}")
+
+    # --- Enhanced Network Analysis ---
+    try:
+        render_enhanced_network(G_viz, pos, node_categories, category_colors, node_features.get(selected_quarter))
+    except Exception as e:
+        st.warning(f"Could not render enhanced network analysis: {e}")
+
+    # --- Model Results (if available) ---
+    try:
+        spec_results, eval_results = load_model_results_from_files()
+        if spec_results or eval_results:
+            render_model_results_section(spec_results, eval_results)
+    except Exception as e:
+        st.warning(f"Could not load model results: {e}")
 
     # --- Summary stats ---
     st.markdown("---")
