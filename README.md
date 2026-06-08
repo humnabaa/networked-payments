@@ -2,18 +2,187 @@
 
 An open-source implementation of the research paper *"Network Structure in UK Payment Flows: Evidence on Economic Interdependencies and Implications for Real-Time Measurement"* (Humnabadkar, 2026).
 
-This project analyses inter-industry payment flows published by the UK Office for National Statistics, constructs directed weighted network graphs, extracts graph-theoretic features, and evaluates whether network structure improves forecasting of payment flow dynamics. 
+This project analyses inter-industry payment flows published by the UK Office for National Statistics, constructs directed weighted network graphs, extracts graph-theoretic features, and evaluates whether network structure improves forecasting of payment flow dynamics.
 
-Try the app here : https://networked-payments-visualizer.streamlit.app/
+Try the app here: https://networked-payments-visualizer.streamlit.app/
 
-## Project details
+## Features
 
-1. **Loads ONS payment data** — reads the experimental "Industry to Industry Payment Flows" Excel dataset, aggregates monthly records into quarterly bilateral flows across 88 industry sectors.
-2. **Builds network graphs** — constructs directed weighted graphs per quarter where nodes are industries and edge weights are payment volumes.
-3. **Extracts graph-theoretic features** — computes centrality measures (betweenness, eigenvector, degree), clustering coefficients, network density, average path length, and 2-hop connectivity.
-4. **Trains forecasting models** — compares Traditional (lagged growth + seasonality), Network-only, and Combined specifications using Random Forest and Gradient Boosting with expanding-window cross-validation.
-5. **Evaluates results** — produces R², RMSE, MAE metrics with bootstrap confidence intervals and Diebold-Mariano tests for statistical significance.
-6. **Interactive dashboard** — a Streamlit app for exploring the network visually, with multiple graph views, edge colouring by network metrics, and temporal navigation.
+**Data**
+- Live connection to the ONS website — streams the 637,000-record industry payment dataset directly into memory with no local file storage required
+- Supports local Excel/CSV upload as an alternative data source
+- Automatic SIC code to industry name resolution and monthly-to-quarterly aggregation
+
+**Network visualisation**
+- Interactive Plotly network graph across 88 UK industries, navigable by quarter (2019 Q1 – 2025 Q4)
+- Five graph structure views: Directed Weighted, Bipartite (Goods vs Services), Temporal Difference, Backbone (statistically significant edges only), and Undirected
+- Edge colouring by 9 network metrics (payment volume, betweenness centrality, in/out strength, eigenvector centrality, clustering coefficient) across 7 colour scales
+
+**Advanced network analysis**
+- Relationship analyser — bilateral flow explorer showing direct volumes, common suppliers/customers, and shortest paths between any two industries
+- Subnetwork explorer — extract and visualise N-hop neighbourhoods around selected nodes
+- Hub analysis — ranked tables of top payers, top recipients, and bridge industries by betweenness centrality
+- Network statistics — density, degree distribution, and total flow summaries per quarter
+
+**ML model results**
+- Model performance comparison across 6 model–specification combinations (Random Forest and Gradient Boosting × Traditional / Network-only / Combined)
+- Learning curves showing R² evolution over expanding-window cross-validation folds
+- Feature importance rankings for Random Forest and Gradient Boosting
+- Diebold-Mariano statistical tests comparing forecast accuracy across specifications
+
+**Analysis pipeline**
+- 7-stage CLI pipeline: data loading → graph construction → feature extraction → target building → model training → evaluation → table generation
+- Expanding-window cross-validation respecting temporal ordering
+- Bootstrap confidence intervals for all reported metrics
+
+## Project Structure
+
+```
+.
+├── config/
+│   └── settings.yaml          # Column mappings, model hyperparameters, period definitions
+├── data/
+│   └── raw/                   # Optional: place your ONS Excel file here
+├── outputs/
+│   ├── figures/               # Generated figures (after pipeline run)
+│   └── tables/                # Generated CSV tables (after pipeline run)
+├── src/
+│   ├── utils.py               # SIC code mappings, industry categorisation helpers
+│   ├── data_loader.py         # ONS Excel/CSV loader and in-memory DataFrame processor
+│   ├── graph_builder.py       # Adjacency matrices, row-normalisation, 2-hop connectivity
+│   ├── feature_extractor.py   # Node, edge, and network-level feature extraction
+│   ├── target_builder.py      # Growth rate computation, lagged features, fixed effects
+│   ├── model_trainer.py       # Expanding-window CV with RF and GBM
+│   ├── evaluator.py           # Metrics, bootstrap CIs, Diebold-Mariano test
+│   └── table_generator.py     # Publication-ready tables (Tables 1–4 from the paper)
+├── viz/
+│   ├── app.py                 # Streamlit dashboard entry point
+│   └── components/
+│       ├── network_graph.py   # Plotly network rendering with metric-based edge colouring
+│       ├── metrics_panel.py   # Sidebar metrics and evolution charts
+│       ├── node_details.py    # Industry inspector panel
+│       ├── time_slider.py     # Quarter selection slider
+│       ├── ons_downloader.py  # Live ONS data loader (in-memory, no disk writes)
+│       ├── model_results.py   # ML model results visualisation (4 tabs)
+│       └── enhanced_network.py # Advanced network analysis tools
+├── run_pipeline.py            # CLI entry point for the full analysis pipeline
+├── pyproject.toml             # Project metadata and dependencies (for uv)
+└── requirements.txt           # Dependencies (for pip)
+```
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10 or later
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+
+### Installation
+
+**With uv (recommended):**
+
+```bash
+git clone https://github.com/humnabaa/networked-payments.git
+cd networked-payments
+uv sync
+```
+
+**With pip:**
+
+```bash
+git clone https://github.com/humnabaa/networked-payments.git
+cd networked-payments
+pip install -r requirements.txt
+```
+
+## Usage
+
+### Interactive Dashboard
+
+```bash
+# With uv
+uv run streamlit run viz/app.py
+
+# With pip (from the networked-payments directory)
+python -m streamlit run viz/app.py
+```
+
+On launch the dashboard shows an empty state. Use the **"Load from ONS"** button in the sidebar to stream the dataset directly from the ONS website, or place a local file in `data/raw/`. You can reload the data at any time without restarting the app.
+
+Dashboard controls:
+- **Time navigation** — quarter slider from 2019-Q1 to 2025-Q4
+- **Graph structure** — Directed Weighted, Bipartite, Temporal Difference, Backbone, or Undirected
+- **Edge colouring** — 9 network metrics × 7 colour scales
+- **Industry inspector** — centrality rankings, top connections, strength over time
+- **Advanced analysis** — relationship analyser, subnetwork explorer, hub rankings, network stats
+- **ML results** — model performance, learning curves, feature importance, statistical tests (visible after running the pipeline)
+
+### Full Analysis Pipeline
+
+```bash
+# Generate synthetic sample data and run all stages
+python run_pipeline.py --generate-sample
+
+# Run on ONS data
+python run_pipeline.py \
+    --data "data/raw/onsindustryflowssic2.xlsx" \
+    --config config/settings.yaml \
+    --output outputs
+```
+
+This runs all 7 stages: data loading, graph construction, feature extraction, target building, model training, evaluation, and table generation.
+
+> **Performance tip:** Model training with default hyperparameters (200 trees, expanding window CV) is compute-intensive. For faster runs, reduce `n_estimators` in `config/settings.yaml`:
+>
+> ```yaml
+> model:
+>   rf_params:
+>     n_estimators: 50
+>     max_depth: 6
+>   gbm_params:
+>     n_estimators: 50
+>     max_depth: 4
+> ```
+
+## Key Results (from the paper)
+
+| Finding | Detail |
+|---------|--------|
+| Forecasting improvement | Combined model achieves R² = 0.412 (+8.8 pp over traditional) |
+| Crisis resilience | Network contribution doubles during COVID-19 (+13.8 pp vs +6.0 pp in stable periods) |
+| Structurally central industries | Financial Services, Wholesale Trade, Professional Services |
+| Network densification | Density grew 12.5% from 2019 to 2024 |
+
+## Configuration
+
+All settings are in `config/settings.yaml`:
+
+- **`schema`** — column name mappings for your data file
+- **`industry_categories`** — SIC code ranges and colours for visualisation groupings
+- **`model`** — Random Forest and Gradient Boosting hyperparameters
+- **`periods`** — date boundaries for pre-pandemic, pandemic, and recovery analysis
+- **`visualization`** — max edges, node sizes, layout parameters
+
+## Data Source
+
+This project uses the ONS experimental [Industry to Industry Payment Flows](https://www.ons.gov.uk/economy/economicoutputandproductivity/output/datasets/industrytoindustrypaymentflowsukexperimentaldataandinsights) dataset. The data comprises anonymised, aggregated Bacs and Faster Payment Service transactions between UK organisations, classified by 2-digit SIC codes.
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@article{humnabadkar2026network,
+  title={Network Structure in UK Payment Flows: Evidence on Economic Interdependencies and Implications for Real-Time Measurement},
+  author={Humnabadkar, Aditya},
+  journal={arXiv preprint arXiv:2604.02068},
+  year={2026}
+}
+```
+
+## Licence
+
+This project is open source. See [LICENSE]([LICENSE](https://github.com/humnabaa/networked-payments?tab=MIT-1-ov-file)) for details.
 
 ## Project Structure
 
