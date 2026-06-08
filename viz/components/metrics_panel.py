@@ -65,9 +65,9 @@ def render_metrics_timeseries(network_features, quarters):
         xaxis=dict(title="Quarter", tickangle=45),
         yaxis=dict(title="Density / Clustering", side="left"),
         yaxis2=dict(title="Avg Path Length", side="right", overlaying="y"),
-        height=300,
-        margin=dict(l=50, r=50, t=40, b=60),
-        legend=dict(orientation="h", y=-0.3),
+        height=380,
+        margin=dict(l=50, r=60, t=40, b=120),
+        legend=dict(orientation="h", y=-0.45, x=0, xanchor="left"),
         hovermode="x unified",
     )
 
